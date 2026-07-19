@@ -23,7 +23,7 @@ class TraceRecord(BaseModel):
     # EvidenceEntry. update_trace_outcome() creates a NEW record via
     # model_copy(update=...) rather than mutating in place — same
     # pattern as Conversation Memory's record_answer().
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, protected_namespaces=())
 
     trace_id: str
     interview_id: str
