@@ -34,6 +34,11 @@ def sign_up(payload: SignUpRequest):
             status_code=400,
             detail="Sign up succeeded but no session was returned — check if email confirmation is required.",
         )
+    if not result.user or not result.user.email:
+        raise HTTPException(
+            status_code=400,
+            detail="Sign up succeeded but no user record was returned.",
+        )
 
     return AuthResponse(
         access_token=result.session.access_token,
@@ -51,6 +56,9 @@ def sign_in(payload: SignInRequest):
             {"email": payload.email, "password": payload.password}
         )
     except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if not result.session or not result.user or not result.user.email:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     return AuthResponse(
