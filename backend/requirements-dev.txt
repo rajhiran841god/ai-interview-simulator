@@ -1,0 +1,9 @@
+-r requirements.txt
+
+# Test-only — used to generate fixture files and run quality checks.
+# Do not add these to requirements.txt; they are not runtime dependencies.
+pypdf==5.0.1
+reportlab==4.2.5
+black==24.10.0
+ruff==0.7.4
+mypy==1.13.0

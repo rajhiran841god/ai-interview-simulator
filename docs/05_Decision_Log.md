@@ -109,7 +109,49 @@ sooner rather than later.
 
 ---
 
-## Decision #003 — [Template for next entry]
+## Decision #003 — Shared type aliases: adopt going forward, defer retrofitting Modules 1–4
+
+**Decision:** Going forward from Module 5 onward, enum-like fields
+(e.g. `Relation`, `QuestionType`, `DecisionStrategy`) should be defined
+once as shared type aliases and imported everywhere they're used,
+rather than redefined per-module. Modules 1–4 (Resume Understanding,
+JD Understanding, Conversation Memory, Evidence Graph) are NOT
+retrofitted to this pattern now — they remain as-is, approved and
+green.
+
+**Evidence:** The same class of bug (a field typed as plain `str` in a
+function signature when the schema defines it as a narrower
+`Literal[...]`) was caught by mypy independently in both Module 3
+(`question_type`) and Module 4 (`relation`) — a repeated pattern, not
+an isolated incident, strongly suggesting it will recur in Module 5+
+without a structural fix.
+
+**Confidence:** High — this is a real, observed pattern (2 independent
+occurrences), not a hypothetical risk.
+
+**Owner:** Raj
+
+**Falsification Condition:** If a shared-alias approach turns out to
+create more friction than it saves (e.g. import cycles between
+modules that should stay independent), revert to per-module type
+definitions and note why in a follow-up entry.
+
+**Why the refactor of Modules 1–4 is deferred, not skipped:** all four
+are currently approved, tested green, and have frozen interfaces per
+the schema-freeze discipline established after Module 2's review.
+Touching four finished modules for a non-functional consistency
+improvement introduces real regression risk for modest immediate
+benefit. This should be scheduled as its own dedicated,
+compatibility-focused change — not bundled into Module 5's scope, and
+not left as an untracked TODO either. This entry is that tracking.
+
+**Date:** July 2026
+**Status:** Locked — apply going forward; retrofit scheduled as future
+dedicated work, not yet started
+
+---
+
+## Decision #004 — [Template for next entry]
 
 **Decision:**
 
