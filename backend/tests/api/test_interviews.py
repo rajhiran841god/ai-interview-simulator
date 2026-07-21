@@ -219,3 +219,53 @@ def test_guard_releases_even_if_the_wrapped_call_raises(client):
         pass
 
     assert interview_id not in concurrency_guard._processing
+
+
+def test_evidence_detail_endpoint_joins_evidence_with_question_number(client):
+    """Decision Log #006 — presentation-layer endpoint, zero engine
+    modification. Exposes real Evidence Graph data joined with
+    Conversation Memory's sequence number, for the frontend's
+    evidence-footnote interaction."""
+    r = client.post("/api/interviews", params={"user_id": "user-1"})
+    interview_id = r.json()["interview_id"]
+
+    with patch(
+        "app.engine.jd.service.structure_jd_text", return_value=FAKE_JD_RESPONSE
+    ):
+        client.post(f"/api/interviews/{interview_id}/jd", data={"jd_text": JD_TEXT})
+
+    with patch(
+        "app.engine.question_generator.service.call_generation",
+        return_value="Tell me about consumer insight.",
+    ):
+        q = client.post(f"/api/interviews/{interview_id}/next-question").json()
+
+    fake_eval = {
+        "answer_classification": "substantive",
+        "evidence_excerpts": ["I analyzed customer surveys"],
+        "contradicts_prior_evidence": False,
+        "contradiction_explanation": None,
+        "confidence_contribution": 0.75,
+        "reasoning_summary": "Good.",
+    }
+    with patch("app.engine.evaluation.service.classify_answer", return_value=fake_eval):
+        client.post(
+            f"/api/interviews/{interview_id}/answer",
+            json={
+                "question_id": q["question_id"],
+                "answer_text": "I analyzed customer surveys.",
+            },
+        )
+
+    r = client.get(f"/api/interviews/{interview_id}/evidence/consumer_insight")
+    assert r.status_code == 200
+    evidence = r.json()
+    assert len(evidence) == 1
+    assert evidence[0]["evidence_excerpt"] == "I analyzed customer surveys"
+    assert evidence[0]["relation"] == "supports"
+    assert evidence[0]["question_number"] == 1
+
+
+def test_evidence_detail_endpoint_unknown_session_returns_404(client):
+    r = client.get("/api/interviews/nonexistent-id/evidence/leadership")
+    assert r.status_code == 404

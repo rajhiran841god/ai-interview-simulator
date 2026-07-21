@@ -322,7 +322,76 @@ general, this decision names which one applies here and why.
 
 ---
 
-## Decision #006 — [Template for next entry]
+## Decision #006 — Engine Freeze Exception Boundary: "Can this be solved entirely by presentation?"
+
+**Decision:** Formalize the rule governing what may and may not touch
+the frozen Interview Intelligence Engine during the Phase 2 product
+redesign (and beyond). Before any proposed change to an engine module
+(schema, prompt, or contract), the question must be asked explicitly:
+**"Can this be solved entirely by presentation?"** If yes, it is solved
+in the frontend/orchestration layer only, and the engine is not
+touched — no exception, no matter how small or reasonable the change
+seems in isolation.
+
+**Context — the specific case that prompted this:** During Phase 2
+design work, splitting `Feedback Generator`'s single `summary_text`
+field into three structured fields (observed / evidence / why it
+matters) was proposed as a presentation improvement. It was correctly
+identified as a real schema and prompt change to a frozen module, not
+a bug fix — and explicitly declined in favor of achieving the same
+reading rhythm through frontend formatting of the existing data
+(`summary_text`, `supporting_evidence_ids`, `contradictory_evidence_ids`,
+`has_unresolved_contradiction`, `insufficient_evidence`), leaving the
+engine completely untouched.
+
+**Reasoning:** The freeze only has value if it survives attractive,
+individually-reasonable exceptions. "Improve the tone," "split this
+field," "add a reasoning summary," "tweak the prompt" are each
+defensible on their own — collectively, saying yes to a sequence of
+them quietly reopens the engine one small change at a time, without
+ever making a single decision that looks like reopening it. Naming the
+boundary explicitly, in writing, is what prevents that drift.
+
+**Explicit boundary, going forward:**
+- **Engine responsibilities** (frozen, changed only per the exceptions
+  below): reasoning, evidence extraction, provenance validation,
+  competency assessment, summary generation.
+- **Frontend/orchestration responsibilities** (free to evolve without
+  restriction): typography, hierarchy, grouping, expansion/interaction,
+  visual storytelling, and new **read-only** API endpoints that expose
+  already-existing engine data (e.g. evidence detail, question
+  sequence numbers) in new shapes — this is presentation infrastructure,
+  not a change to what the engine reasons about or produces.
+
+**The only permitted post-freeze engine changes:**
+1. **Bug fixes** — incorrect reasoning, broken provenance, hallucination,
+   validation failures (the same standard already used for the Feedback
+   Generator UUID-leak fix during live validation).
+2. **Security or reliability fixes.**
+3. **Performance improvements** — lower latency, lower cost, robustness
+   — provided the underlying reasoning/output contract is unchanged.
+
+Everything else — however reasonable it sounds in isolation — stays
+outside the engine.
+
+**Confidence:** High — this is a process/governance decision, not an
+empirical claim requiring evidence.
+
+**Owner:** Raj
+
+**Falsification Condition:** If, in practice, a genuinely important
+product improvement turns out to be impossible without an engine
+change (i.e. the presentation layer cannot achieve it under any
+formatting/API-exposure approach), this rule should be revisited with
+an explicit, individually-logged exception — decided consciously, the
+same way Decision #004 and #005 were, never silently.
+
+**Date:** 2026-07-21
+**Status:** Locked
+
+---
+
+## Decision #007 — [Template for next entry]
 
 **Decision:**
 

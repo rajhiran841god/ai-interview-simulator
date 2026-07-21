@@ -56,3 +56,19 @@ class SubmitAnswerRequest(BaseModel):
 class SubmitAnswerResponse(BaseModel):
     accepted: bool
     answer_classification: Optional[str] = None
+
+
+class EvidenceDetail(BaseModel):
+    """
+    Presentation-layer shape exposing existing Evidence Graph data for
+    the frontend's evidence-footnote interaction. Per Decision Log #006:
+    this is orchestration/API infrastructure, not an engine change —
+    it exposes EvidenceEntry + TurnRecord fields that already exist,
+    joined and reshaped for display, without modifying either module's
+    schema or Feedback Generator's prompt/output at all.
+    """
+
+    evidence_id: str
+    evidence_excerpt: str
+    relation: str
+    question_number: int

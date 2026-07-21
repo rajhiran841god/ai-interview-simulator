@@ -27,6 +27,7 @@ from app.orchestrator.schema import (
     NextQuestionResponse,
     SubmitAnswerRequest,
     SubmitAnswerResponse,
+    EvidenceDetail,
 )
 from app.engine.resume.service import understand_resume
 from app.engine.resume.schema import RejectionError as ResumeRejectionError
@@ -223,6 +224,40 @@ def get_report(interview_id: str):
         raise HTTPException(status_code=500, detail=f"Feedback Generator error: {e}")
 
     return report.model_dump()
+
+
+@router.get(
+    "/interviews/{interview_id}/evidence/{competency_id}",
+    response_model=list[EvidenceDetail],
+)
+def get_evidence_detail(interview_id: str, competency_id: str):
+    """
+    Presentation-layer endpoint (Decision Log #006) — exposes real
+    Evidence Graph entries, joined with Conversation Memory's turn
+    sequence numbers, for the frontend's evidence-footnote UI. Does
+    not modify, call, or depend on Feedback Generator in any way —
+    reads Evidence Graph and Conversation Memory directly, both
+    already-existing, unchanged engine modules.
+    """
+    session = session_store.get_session(interview_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Interview session not found.")
+
+    from app.orchestrator.engine_singletons import evidence_graph, conversation_memory
+
+    entries = evidence_graph.get_evidence_for_competency(interview_id, competency_id)
+    history = conversation_memory.get_history(interview_id)
+    sequence_by_turn_id = {t.turn_id: t.sequence_number for t in history}
+
+    return [
+        EvidenceDetail(
+            evidence_id=e.evidence_id,
+            evidence_excerpt=e.evidence_excerpt,
+            relation=e.relation,
+            question_number=sequence_by_turn_id.get(e.turn_id, 0),
+        )
+        for e in entries
+    ]
 
 
 def _get_trace(interview_id: str, question_id: str):
