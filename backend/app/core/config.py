@@ -8,6 +8,7 @@ outside this file should import provider SDKs directly — route through
 app/services/ instead, so swapping a provider later means editing here
 and in one service module, not hunting through business logic.
 """
+
 from pydantic_settings import BaseSettings
 
 
@@ -32,6 +33,13 @@ class Settings(BaseSettings):
     # App
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
     ENVIRONMENT: str = "development"
+
+    # Voice interface (Decision Log #004) — set in your OWN .env, never
+    # shared in chat. LIVEKIT_URL is the WebSocket URL the frontend
+    # client connects to (e.g. wss://your-project.livekit.cloud).
+    LIVEKIT_URL: str = ""
+    LIVEKIT_API_KEY: str = ""
+    LIVEKIT_API_SECRET: str = ""
 
     class Config:
         env_file = ".env"

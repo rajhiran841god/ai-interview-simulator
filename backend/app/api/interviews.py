@@ -28,7 +28,9 @@ from app.orchestrator.schema import (
     SubmitAnswerRequest,
     SubmitAnswerResponse,
     EvidenceDetail,
+    VoiceTokenResponse,
 )
+from app.core.config import settings
 from app.engine.resume.service import understand_resume
 from app.engine.resume.schema import RejectionError as ResumeRejectionError
 from app.engine.jd.service import understand_jd
@@ -258,6 +260,58 @@ def get_evidence_detail(interview_id: str, competency_id: str):
         )
         for e in entries
     ]
+
+
+@router.post(
+    "/interviews/{interview_id}/voice-token", response_model=VoiceTokenResponse
+)
+def get_voice_token(interview_id: str):
+    """
+    Generates a LiveKit access token scoped to this interview's room.
+    Presentation/infrastructure endpoint (Decision Log #006) — does
+    not touch the engine. The room_name convention (== interview_id)
+    matches app/voice/agent.py's entrypoint, which derives interview_id
+    from ctx.room.name.
+
+    NOT yet live-tested: requires real LIVEKIT_URL/API_KEY/API_SECRET,
+    which are not configured in this environment. See
+    docs/VOICE_VALIDATION.md.
+    """
+    session = session_store.get_session(interview_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Interview session not found.")
+
+    if (
+        not settings.LIVEKIT_API_KEY
+        or not settings.LIVEKIT_API_SECRET
+        or not settings.LIVEKIT_URL
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Voice is not configured on this server — LIVEKIT_URL, "
+            "LIVEKIT_API_KEY, and LIVEKIT_API_SECRET must be set.",
+        )
+
+    from livekit.api import AccessToken, VideoGrants
+
+    token = (
+        AccessToken(settings.LIVEKIT_API_KEY, settings.LIVEKIT_API_SECRET)
+        .with_identity(session.user_id)
+        .with_name(session.user_id)
+        .with_grants(
+            VideoGrants(
+                room_join=True,
+                room=interview_id,
+                can_publish=True,
+                can_subscribe=True,
+            )
+        )
+        .to_jwt()
+    )
+
+    return VoiceTokenResponse(
+        livekit_url=settings.LIVEKIT_URL, token=token, room_name=interview_id
+    )
 
 
 def _get_trace(interview_id: str, question_id: str):

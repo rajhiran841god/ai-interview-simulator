@@ -72,3 +72,16 @@ class EvidenceDetail(BaseModel):
     evidence_excerpt: str
     relation: str
     question_number: int
+
+
+class VoiceTokenResponse(BaseModel):
+    """
+    Presentation-layer response for LiveKit room access (Decision Log
+    #006 — infrastructure to let the frontend join a voice session,
+    not an engine change). The frontend's LiveKit client uses this
+    token + URL to connect; it never sees the LIVEKIT_API_SECRET.
+    """
+
+    livekit_url: str
+    token: str
+    room_name: str

@@ -269,3 +269,57 @@ def test_evidence_detail_endpoint_joins_evidence_with_question_number(client):
 def test_evidence_detail_endpoint_unknown_session_returns_404(client):
     r = client.get("/api/interviews/nonexistent-id/evidence/leadership")
     assert r.status_code == 404
+
+
+def test_voice_token_endpoint_returns_valid_scoped_token(client, monkeypatch):
+    """Decision Log #006 — presentation/infrastructure endpoint, zero
+    engine modification. Generates a real, valid LiveKit access token
+    scoped to the interview's room, matching app/voice/agent.py's
+    existing room_name == interview_id convention."""
+    monkeypatch.setattr(
+        "app.api.interviews.settings.LIVEKIT_URL", "wss://test.livekit.cloud"
+    )
+    monkeypatch.setattr("app.api.interviews.settings.LIVEKIT_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "app.api.interviews.settings.LIVEKIT_API_SECRET",
+        "test-secret-long-enough-for-jwt-signing",
+    )
+
+    r = client.post("/api/interviews", params={"user_id": "voice-user"})
+    interview_id = r.json()["interview_id"]
+
+    r = client.post(f"/api/interviews/{interview_id}/voice-token")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["livekit_url"] == "wss://test.livekit.cloud"
+    assert body["room_name"] == interview_id
+    assert len(body["token"]) > 0
+
+    # Decode the JWT payload (no signature verification needed here —
+    # this test checks OUR code constructed the right claims, not that
+    # the JWT library itself works) to confirm room scoping is correct.
+    import base64
+    import json as json_module
+
+    payload_b64 = body["token"].split(".")[1]
+    payload_b64 += "=" * (-len(payload_b64) % 4)
+    payload = json_module.loads(base64.urlsafe_b64decode(payload_b64))
+    assert payload["video"]["room"] == interview_id
+    assert payload["video"]["roomJoin"] is True
+
+
+def test_voice_token_endpoint_without_config_returns_503(client, monkeypatch):
+    monkeypatch.setattr("app.api.interviews.settings.LIVEKIT_URL", "")
+    monkeypatch.setattr("app.api.interviews.settings.LIVEKIT_API_KEY", "")
+    monkeypatch.setattr("app.api.interviews.settings.LIVEKIT_API_SECRET", "")
+
+    r = client.post("/api/interviews", params={"user_id": "voice-user"})
+    interview_id = r.json()["interview_id"]
+
+    r = client.post(f"/api/interviews/{interview_id}/voice-token")
+    assert r.status_code == 503
+
+
+def test_voice_token_endpoint_unknown_session_returns_404(client):
+    r = client.post("/api/interviews/nonexistent-id/voice-token")
+    assert r.status_code == 404
