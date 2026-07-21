@@ -144,34 +144,54 @@ numbers transfer.
 
 ---
 
+## Entry 8 — Weak/Insufficient-Evidence Answer Path (closes Phase 1's remaining validation gaps)
+
+| Field | Value |
+|---|---|
+| **Module** | Cross-cutting — Question Generator, Evaluation Engine, Competency Model, Feedback Generator, in one combined test |
+| **Input** | Deliberately weak, vague answer: *"Um, I guess I have led people before. It went okay I think. Not really sure what else to say about it."* |
+| **Model used** | `anthropic/claude-sonnet-4.5` |
+| **Gateway/provider** | aicredits.in |
+| **Latency** | Question Generator: 2,584 ms; Evaluation Engine: 4,581 ms; Feedback Generator: 3,478 ms — **closes the latency-measurement gap for all 5 LLM-backed modules** |
+| **Expected behavior** | Correctly classify a vague, substance-free answer (not fabricate evidence to fill the gap); propagate `insufficient_evidence` honestly through Competency Model to the final report; feedback should acknowledge the gap constructively, not generically |
+| **Actual behavior** | `answer_classification: "non_answer"` (defensible — borderline with `partial`, see Observations). `evidence_ids_created: []` — correctly extracted nothing rather than fabricating evidence just because a competency was targeted. `confidence_contribution: 0.0`. Propagated correctly to `insufficient_evidence: true` in the final report, with honest, constructive feedback (*"Consider preparing specific stories..."*), not generic filler. AC1 held — no confidence numbers in the summary text. |
+| **Pass/Fail** | ✅ **Pass** |
+| **Observations** | The classification boundary between `non_answer` and a severely weak `partial` is genuinely fuzzy — this answer technically acknowledges some engagement ("I guess I have led people") but the model classified it as `non_answer` given the total absence of substance. Worth knowing as real calibration data, not a bug: this is where the model actually draws that line in practice. Most importantly: **no fabrication occurred even under pressure to produce something** — this is arguably the hardest test of the no-fabrication discipline in the whole validation log, since there was genuinely nothing to extract. |
+| **Follow-up action** | None outstanding for this path. Remaining Phase 1 item: the 6-test `VOICE_VALIDATION.md` checklist, which requires live LiveKit/Deepgram/ElevenLabs credentials not yet configured. |
+
+---
+
 
 **The entire live-API validation gap that had been open since Module 1 is now closed with real evidence, not mocks.** Summary:
 
 - **4 modules passed cleanly on first live test**: JD Understanding, Resume Understanding, Question Generator, Reasoning Engine (stopping condition + adaptive targeting).
 - **1 module (Feedback Generator) found a real bug on first live test, fixed same-session, re-verified clean** — exactly the value this exercise was built to produce.
 - **1 full multi-turn orchestrated session, through the real HTTP API**, confirmed the core adaptive-questioning premise (the entire reason this project exists, per Decision #002) works correctly end-to-end with a live model: the system correctly cycled through all 3 competencies in order of need, generated well-grounded cross-questions referencing specific prior context even several turns later, and evaluated the real stopping condition against real accumulated evidence.
+- **Contradiction detection and the weak/insufficient-evidence path are both now closed**, traced end-to-end, both showing correct, non-fabricating behavior under the two hardest conditions the no-fabrication rule is meant to guard against.
 
 ### Real, actionable findings for the next phase
 
 1. **`MIN_QUESTIONS=6` / `0.85` average / `0.60` floor thresholds appear conservative** — 6 consecutive strong, substantive answers were not enough to trigger a stop. This is genuine pilot-tuning signal, not a flaw — per `reasoning_config.py`'s own documentation, these were always unvalidated pilot defaults awaiting exactly this kind of real data. Do not retune from a single session — collect several more real interviews first, per the original recommendation to avoid overfitting to one data point.
-2. **The weak-answer / insufficient-evidence / deflection paths remain untested live** — contradiction detection is now closed (Entry 7), but every real test so far used strong or clearly-conflicting answers. Worth a deliberate test with a deliberately vague, weak, or evasive answer before wider pilot use, since these paths carry real product-quality risk (Architecture Review Gate #4's core promise depends on handling weak evidence honestly, not just strong evidence well).
-3. **Latency remains incompletely measured** — only Resume/JD Understanding expose `processing_time_ms`; Evaluation Engine, Question Generator, and Feedback Generator do not. Worth closing this gap (a simple wrapper, not an engine change) before treating the latency picture as complete, especially given `VOICE_VALIDATION.md`'s Test 2 depends on knowing exactly where time is spent.
+2. **The `non_answer` vs. `partial` classification boundary is genuinely fuzzy in practice** — Entry 8 showed a borderline case classified as `non_answer`. Worth watching across more real examples, not something to "fix" from one data point.
+3. **Only the voice validation checklist remains from Phase 1** — all 6 tests in `VOICE_VALIDATION.md` require live LiveKit/Deepgram/ElevenLabs credentials, not yet configured.
 
-## Latency Summary (update as entries are added)
+## Latency Summary — Complete for All 5 LLM-Backed Modules
 
 | Module | Latency (ms) |
 |---|---|
 | JD Understanding | 3,892 |
 | Resume Understanding | 7,238 |
-| Evaluation Engine | — |
-| Question Generator | — |
-| Feedback Generator | — |
+| Question Generator | 2,584 |
+| Evaluation Engine | 4,581 |
+| Feedback Generator | 3,478 |
 
-**Running concern:** if Evaluation Engine + Question Generator each take
-~4s like JD Understanding did, a single voice turn (which calls both
-in sequence) could mean 7-8+ seconds of silence between a student
-finishing speaking and the AI responding — directly relevant to
-`VOICE_VALIDATION.md`'s Test 2. Keep tracking this as more entries
-come in, and treat it as decision-relevant data for whether voice
-ships as designed, per Decision #004's falsification condition — not
-just a curiosity.
+**A real voice turn calls Evaluation Engine + Question Generator in
+sequence: 4,581 + 2,584 = ~7.2 seconds of engine-only processing time**,
+before adding STT transcription and TTS synthesis on top. This is real,
+concrete data — not a guess — for `VOICE_VALIDATION.md`'s Test 2
+concern: a ~7+ second engine-only delay per turn is a serious risk to
+the "feels like a real interview" goal, and should be treated as
+decision-relevant for Decision #004's falsification condition once
+voice testing actually happens, not dismissed as acceptable without
+real user reaction data.
+
