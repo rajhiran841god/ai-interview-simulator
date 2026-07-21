@@ -106,7 +106,7 @@ numbers transfer.
 | **Actual behavior** | **AC1 held: zero confidence numbers or percentages anywhere in the output** — verified by inspection, no float/percentage appeared. `supporting_evidence_ids` correctly populated with 3 real, verified evidence IDs. **However: the `summary_text` prose contained raw internal `evidence_id` UUIDs embedded inline** — e.g. *"...redesigned our approach based on the feedback received (evidence: c8f16fa5-4b83-40de-9d74-b21e748094d7)."* This is not a confidence leak (AC1 held), but a different real quality bug: internal implementation detail leaking into text a student would actually read. |
 | **Pass/Fail** | ⚠️ **Pass on AC1 (the critical criterion), Fail on prose quality — bug found and fixed same session** |
 | **Observations** | **This is exactly the kind of bug live testing exists to catch and mocked tests structurally cannot.** Every mocked test in Module 10's original suite supplied hand-written `summary_text` values — none of them could ever reveal that a real model might interpret "cite evidence_ids" as "embed them inline in the prose" rather than "report them only in the separate structured field." Root cause: the system prompt said "cite which evidence_id(s)...support it" without specifying *where* — a genuine, fixable prompt ambiguity, not model misbehavior. **Fixed two ways**: (1) prompt now explicitly states citations belong only in `cited_evidence_ids`, never in `summary_text`, with explicit examples of what NOT to do; (2) a structural, regex-based safeguard (`_scrub_evidence_ids`) now strips any UUID-shaped pattern from `summary_text` regardless of prompt compliance — same "never trust the model alone" discipline already used for `EvidenceVerifier`'s ID checking. Verified against the exact real problematic text from this test; all 3 UUIDs removed, real content and natural sentence flow preserved, no leftover double-spacing or dangling punctuation. Added as a permanent regression test using the literal real text from this incident, not a synthetic approximation. |
-| **Follow-up action** | **Re-run this exact same test again with a fresh live call** to confirm the prompt fix actually changes the model's behavior (not just that the structural scrub catches it if it doesn't) — the scrub is a safety net, not a substitute for verifying the root-cause fix works. Add timing wrapper (same gap as Entries 3-4). |
+| **Follow-up action** | ✅ **Re-tested with a fresh live call — confirmed fixed.** Same interview scenario, new live model response: `summary_text` was completely clean, zero UUIDs, zero citation markers, natural second-person prose. `supporting_evidence_ids` still correctly populated with 3 real IDs in the proper structured field — confirming the fix didn't break the actual citation mechanism, only corrected where citations belong. The structural scrub had nothing to remove this time, meaning the root-cause prompt fix alone was sufficient — the scrub remains in place as a permanent safety net for any future drift, per the project's "never trust the model alone" discipline. Remaining: add timing wrapper (same gap as Entries 3-4). |
 
 
 ---
@@ -115,15 +115,32 @@ numbers transfer.
 
 | Field | Value |
 |---|---|
-| **Module** | Full pipeline, via `/api/interviews/*` endpoints |
-| **Input** | *(pending — real resume + real JD + multiple live Q&A turns)* |
-| **Expected behavior** | Complete session: create → resume → JD → multiple question/answer cycles → stop decision → report, all against live model calls |
-| **Actual behavior** | |
-| **Pass/Fail** | |
-| **Observations** | |
-| **Follow-up action** | |
+| **Module** | Full pipeline, via real `/api/interviews/*` HTTP endpoints (uvicorn server, real requests via curl) |
+| **Input** | Real JD: *"We are hiring a Marketing Associate with strong consumer insight skills, experience with brand positioning, and comfort working in a fast-paced, cross-functional team environment."* + a real, detailed answer about discovering a packaging-related customer insight through complaint tickets rather than survey data |
+| **Model used** | `anthropic/claude-sonnet-4.5` |
+| **Gateway/provider** | aicredits.in |
+| **Latency** | Not captured this run — could add via browser dev tools / curl's `-w "%{time_total}"` in a future entry |
+| **Expected behavior** | Full session lifecycle works end-to-end through the real HTTP layer (not direct Python calls like Entries 1-5): create → JD upload → competency init → question → answer → evaluation → competency update → **adaptive** next question targeting a *different*, lower-confidence competency |
+| **Actual behavior** | Session created cleanly. JD upload correctly extracted **3** competencies (`consumer_insight_skills`, `brand_positioning`, `cross_functional_collaboration` — the third sensibly derived from "fast-paced, cross-functional team environment," not explicit JD wording, showing the extraction generalizes beyond Entry 1's simpler JD). First question: a specific, well-formed "fresh" question targeting `consumer_insight_skills`. Real answer submitted (a detailed, well-reasoned response about discovering a packaging issue via complaint-ticket analysis) — classified `substantive`. **Second question call correctly switched target to `brand_positioning`** — the previously zero-confidence competency — rather than continuing to probe the just-answered one. |
+| **Pass/Fail** | ✅ **Pass** |
+| **Observations** | **This is the first live confirmation of the actual core product premise** — adaptive questioning that responds to real evidence, through the real HTTP API a frontend would actually call, not a direct Python invocation. Everything tested in Entries 1-5 individually (extraction, evaluation, question generation) is confirmed here to work *together*, live, under `app/orchestrator/`'s real wiring, including the engine singletons, session store, and concurrency guard, none of which had been exercised with a live model until this test. |
+| **Follow-up action** | ✅ **Session extended to a full 6-turn arc, report generated and precisely verified (not eyeballed) — closing out Entry 6.** All 3 competencies present in the final report, each correctly synthesizing TWO real answers (an opening story + its later cross-question) into one coherent, accurate narrative — the deepest test of the Feedback Generator's synthesis quality so far. **AC1 and the Entry 5 UUID fix both confirmed holding**, verified by scanning every `summary_text` field directly: zero confidence numbers, zero percentages, zero UUIDs anywhere in the prose across all three competencies; every evidence ID correctly confined to the separate `supporting_evidence_ids` arrays. **Stopping condition tested live for the first time**: after crossing `MIN_QUESTIONS=6`, the Reasoning Engine correctly evaluated real confidence data and chose `continue` rather than `stop` — valuable pilot-tuning signal (see below), not a bug. **One real, still-open gap**: every answer in this session was strong, so the `insufficient_evidence`/`has_unresolved_contradiction` paths remain untested live end-to-end — worth a dedicated test with a deliberately weak or contradictory answer before broader pilot use. |
 
 ---
+
+## Overall Assessment — All 6 Entries Complete
+
+**The entire live-API validation gap that had been open since Module 1 is now closed with real evidence, not mocks.** Summary:
+
+- **4 modules passed cleanly on first live test**: JD Understanding, Resume Understanding, Question Generator, Reasoning Engine (stopping condition + adaptive targeting).
+- **1 module (Feedback Generator) found a real bug on first live test, fixed same-session, re-verified clean** — exactly the value this exercise was built to produce.
+- **1 full multi-turn orchestrated session, through the real HTTP API**, confirmed the core adaptive-questioning premise (the entire reason this project exists, per Decision #002) works correctly end-to-end with a live model: the system correctly cycled through all 3 competencies in order of need, generated well-grounded cross-questions referencing specific prior context even several turns later, and evaluated the real stopping condition against real accumulated evidence.
+
+### Real, actionable findings for the next phase
+
+1. **`MIN_QUESTIONS=6` / `0.85` average / `0.60` floor thresholds appear conservative** — 6 consecutive strong, substantive answers were not enough to trigger a stop. This is genuine pilot-tuning signal, not a flaw — per `reasoning_config.py`'s own documentation, these were always unvalidated pilot defaults awaiting exactly this kind of real data. Do not retune from a single session — collect several more real interviews first, per the original recommendation to avoid overfitting to one data point.
+2. **The weak-answer / contradiction / insufficient-evidence paths remain untested live** — every real test so far used strong, detailed answers. Worth a deliberate test with a deliberately vague or contradictory answer before wider pilot use, since these paths carry real product-quality risk (Architecture Review Gate #4's core promise depends on handling weak evidence honestly, not just strong evidence well).
+3. **Latency remains incompletely measured** — only Resume/JD Understanding expose `processing_time_ms`; Evaluation Engine, Question Generator, and Feedback Generator do not. Worth closing this gap (a simple wrapper, not an engine change) before treating the latency picture as complete, especially given `VOICE_VALIDATION.md`'s Test 2 depends on knowing exactly where time is spent.
 
 ## Latency Summary (update as entries are added)
 
