@@ -56,53 +56,59 @@ function SessionContent() {
 
   if (!interviewId) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <p className="text-sm text-red-600">No interview session found.</p>
+      <main className="flex min-h-screen items-center justify-center bg-paper px-4">
+        <p className="font-sans text-sm text-clay">No interview session found.</p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-10">
+    <main className="min-h-screen bg-paper px-4 py-16">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wide text-gray-400">
+        <div className="mb-6 flex items-center justify-between">
+          <span className="font-sans text-xs uppercase tracking-wide text-ink-light">
             Question {questionCount}
           </span>
-          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-            Text mode — voice interview coming in a later release
+          <span className="font-sans rounded-full bg-sage-light px-3 py-1 text-xs font-medium text-sage-dark">
+            Text mode &middot; voice coming in a later release
           </span>
         </div>
 
-        <div className="rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-          {loading && !current && <p className="text-sm text-gray-500">Preparing your interview...</p>}
+        <div className="bg-paper-card rounded-card p-8 md:p-10 shadow-sm min-h-[280px] flex flex-col justify-center">
+          {loading && !current && (
+            <p className="font-sans text-sm text-ink-light">Preparing your interview...</p>
+          )}
 
           {current?.decision_type === "stop" && (
             <div>
-              <h2 className="text-lg font-medium text-gray-900">That concludes the interview.</h2>
-              <p className="mt-2 text-sm text-gray-500">{current.stop_reason}</p>
-              <p className="mt-2 text-sm text-gray-400">Preparing your feedback report...</p>
+              <h2 className="font-display text-2xl text-ink mb-2">
+                That concludes the interview.
+              </h2>
+              <p className="font-sans text-sm text-ink-light mb-1">{current.stop_reason}</p>
+              <p className="font-sans text-sm text-sage">Preparing your feedback report...</p>
             </div>
           )}
 
           {current?.decision_type === "continue" && (
             <>
-              <h2 className="text-xl font-medium text-gray-900">{current.question_text}</h2>
-              <form onSubmit={handleSubmitAnswer} className="mt-6">
+              <h2 className="font-display text-2xl md:text-3xl text-ink mb-7 leading-snug">
+                {current.question_text}
+              </h2>
+              <form onSubmit={handleSubmitAnswer}>
                 <textarea
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   rows={6}
-                  className="w-full rounded-md border border-gray-300 p-3 text-sm focus:border-gray-900 focus:outline-none"
+                  className="font-sans w-full rounded-card border border-ink/15 p-3.5 text-sm text-ink focus:border-ink focus:outline-none bg-paper"
                   placeholder="Type your answer..."
                   disabled={submitting || loading}
                   autoFocus
                 />
-                {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+                {error && <p className="font-sans text-sm text-clay mt-3">{error}</p>}
                 <button
                   type="submit"
                   disabled={submitting || loading || !answer.trim()}
-                  className="mt-4 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                  className="font-sans mt-5 rounded-card bg-ink px-5 py-2.5 text-sm font-medium text-paper hover:bg-ink-light transition-colors disabled:opacity-50"
                 >
                   {submitting ? "Submitting..." : "Submit Answer"}
                 </button>
