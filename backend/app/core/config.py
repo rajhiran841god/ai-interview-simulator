@@ -41,8 +41,24 @@ class Settings(BaseSettings):
     LIVEKIT_API_KEY: str = ""
     LIVEKIT_API_SECRET: str = ""
 
+    # Engine store backend: "postgres" (real, persistent, default —
+    # required for voice, since the FastAPI backend and the LiveKit
+    # voice worker are separate processes and need shared state) or
+    # "memory" (in-process only — used by the offline test suite so
+    # it never needs real Supabase connectivity).
+    STORE_BACKEND: str = "postgres"
+
     class Config:
         env_file = ".env"
+        # Real bug found during live voice setup: pydantic-settings
+        # rejects any .env variable not declared as a field here by
+        # default. DEEPGRAM_API_KEY and ELEVEN_API_KEY are legitimately
+        # read directly by their respective LiveKit plugin packages
+        # (via os.environ, not through this Settings class) — they
+        # don't belong here as fields, but must not cause a startup
+        # crash either. "ignore" lets any such extra variable pass
+        # through untouched.
+        extra = "ignore"
 
 
 settings = Settings()

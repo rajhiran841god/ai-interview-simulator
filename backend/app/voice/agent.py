@@ -35,17 +35,57 @@ every other LLM-backed module in this project.
 import logging
 from typing import AsyncIterable, Optional
 
-from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli, llm
-from livekit.plugins import deepgram, elevenlabs, silero
+# Load .env BEFORE anything else. Real gap found during live setup:
+# unlike the FastAPI backend (which reads .env automatically via
+# pydantic-settings' env_file config), this file runs as a standalone
+# CLI process (`python -m app.voice.agent dev`) — nothing loads .env
+# into the process environment otherwise, causing a confusing
+# "ws_url is required" crash even when LIVEKIT_URL is correctly set
+# in .env. Must happen before importing livekit.agents, since that
+# import reads LIVEKIT_URL/etc. at module-level in some code paths.
+from dotenv import load_dotenv
 
-from app.engine.conversation_memory.service import ConversationMemoryService
-from app.engine.evidence_graph.service import EvidenceGraphService
-from app.engine.logging.service import LoggingService
-from app.engine.competency_model.service import CompetencyModelService
-from app.engine.evaluation.service import EvaluationEngineService
-from app.engine.reasoning.service import ReasoningEngineService
-from app.engine.question_generator.service import QuestionGeneratorService
-from app.shared.turn_timer import TurnTimer
+load_dotenv()
+
+from livekit.agents import (
+    Agent,
+    AgentSession,
+    JobContext,
+    WorkerOptions,
+    cli,
+    llm,
+)  # noqa: E402 - must come after load_dotenv()
+from livekit.plugins import (
+    deepgram,
+    elevenlabs,
+    silero,
+    anthropic,
+)  # noqa: E402 - must come after load_dotenv()
+
+from app.engine.conversation_memory.service import (
+    ConversationMemoryService,
+)  # noqa: E402 - must come after load_dotenv()
+from app.engine.evidence_graph.service import (
+    EvidenceGraphService,
+)  # noqa: E402 - must come after load_dotenv()
+from app.engine.logging.service import (
+    LoggingService,
+)  # noqa: E402 - must come after load_dotenv()
+from app.engine.competency_model.service import (
+    CompetencyModelService,
+)  # noqa: E402 - must come after load_dotenv()
+from app.engine.evaluation.service import (
+    EvaluationEngineService,
+)  # noqa: E402 - must come after load_dotenv()
+from app.engine.reasoning.service import (
+    ReasoningEngineService,
+)  # noqa: E402 - must come after load_dotenv()
+from app.engine.question_generator.service import (
+    QuestionGeneratorService,
+)  # noqa: E402 - must come after load_dotenv()
+from app.shared.turn_timer import (
+    TurnTimer,
+)  # noqa: E402 - must come after load_dotenv()
 
 logger = logging.getLogger("placementos.voice")
 
@@ -228,32 +268,36 @@ def _now_iso() -> str:
 async def entrypoint(ctx: JobContext):
     """
     LiveKit worker entrypoint — one of these runs per interview
-    session (per "Job", in LiveKit's terms). Real interview_id must be
-    passed via the room name or job metadata; placeholder shown here.
+    session (per "Job", in LiveKit's terms).
     """
     await ctx.connect()
 
     interview_id = ctx.room.name  # convention: room name == interview_id
 
-    # Wire the SAME engine services the text interface uses. In
-    # production these would be constructed with real (e.g.
-    # Postgres-backed) stores, not the in-memory ones used in tests —
-    # that swap is exactly what the storage abstractions built in
-    # Modules 3/4/5/7 were designed for.
-    conversation_memory = ConversationMemoryService()
-    evidence_graph = EvidenceGraphService(conversation_memory=conversation_memory)
-    logging_service = LoggingService()
-    competency_model = CompetencyModelService()
-    evaluation_engine = EvaluationEngineService(
-        evidence_graph=evidence_graph, logging_service=logging_service
-    )
-    reasoning_engine = ReasoningEngineService(
-        competency_model=competency_model,
-        evidence_graph=evidence_graph,
-        logging_service=logging_service,
-    )
-    question_generator = QuestionGeneratorService(
-        evidence_graph=evidence_graph, conversation_memory=conversation_memory
+    # REAL BUG FOUND DURING LIVE TESTING: this used to construct fresh
+    # services with default (in-memory) stores every time, completely
+    # disconnected from whatever the FastAPI backend had already
+    # written — even after Postgres-backed stores were built and
+    # wired into app/orchestrator/engine_singletons.py for the
+    # backend, this file was never updated to actually use them.
+    # Symptom: "No competencies initialized" even though the backend
+    # had already initialized them via a real HTTP call — because the
+    # voice worker was reading from its own private, empty, in-memory
+    # store, not the real one.
+    #
+    # Fix: import and reuse the EXACT SAME shared singleton instances
+    # the backend uses — same STORE_BACKEND switch, same real
+    # Postgres connection when configured. This is what actually
+    # makes the FastAPI backend and this separate worker process see
+    # the same data.
+    from app.orchestrator.engine_singletons import (
+        conversation_memory,
+        evidence_graph,
+        logging_service,
+        competency_model,
+        evaluation_engine,
+        reasoning_engine,
+        question_generator,
     )
 
     agent = InterviewVoiceAgent(
@@ -271,6 +315,19 @@ async def entrypoint(ctx: JobContext):
         stt=deepgram.STT(model="nova-3"),
         tts=elevenlabs.TTS(),
         vad=silero.VAD.load(),
+        # REAL BUG FOUND DURING LIVE TESTING: without ANY llm=
+        # configured, LiveKit's pipeline apparently never recognizes
+        # there's an "LLM step" to run at all, and so never invokes
+        # Agent.llm_node() — confirmed live: STT and turn-detection
+        # worked correctly (real transcripts, real "user turn
+        # committed" events), but the agent never responded, not even
+        # once. This anthropic.LLM instance is NEVER actually called
+        # for generation — InterviewVoiceAgent.llm_node() overrides
+        # and fully replaces this step with the real engine calls.
+        # It exists only so the pipeline treats this as an
+        # LLM-configured session and actually reaches the point of
+        # invoking our override.
+        llm=anthropic.LLM(),
         # turn_detection left as LiveKit's default semantic model
         # (MultilingualModel) rather than raw silence-based VAD only —
         # per Decision #004, we don't build our own turn detection.

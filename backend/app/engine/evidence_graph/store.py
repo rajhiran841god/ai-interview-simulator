@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from app.engine.evidence_graph.schema import EvidenceEntry
+from app.core.supabase_data_client import get_data_client, as_json_dict
 
 
 class EvidenceGraphStore(ABC):
@@ -83,3 +84,62 @@ class InMemoryEvidenceGraphStore(EvidenceGraphStore):
 
 def generate_evidence_id() -> str:
     return str(uuid.uuid4())
+
+
+class PostgresEvidenceGraphStore(EvidenceGraphStore):
+    """Persistent implementation — see PostgresConversationMemoryStore
+    for the full rationale (Decision Log #006, cross-process bug fix)."""
+
+    def __init__(self):
+        self._client = get_data_client()
+
+    def add_entry(self, entry: EvidenceEntry) -> EvidenceEntry:
+        self._client.table("evidence_entries").insert(
+            {
+                "evidence_id": entry.evidence_id,
+                "interview_id": entry.interview_id,
+                "turn_id": entry.turn_id,
+                "competency_id": entry.competency_id,
+                "data": entry.model_dump(),
+            }
+        ).execute()
+        return entry
+
+    def get_entry(self, interview_id: str, evidence_id: str) -> Optional[EvidenceEntry]:
+        result = (
+            self._client.table("evidence_entries")
+            .select("data")
+            .eq("interview_id", interview_id)
+            .eq("evidence_id", evidence_id)
+            .maybe_single()
+            .execute()
+        )
+        if result is None or not result.data:
+            return None
+        return EvidenceEntry(**as_json_dict(result.data, "data"))
+
+    def get_evidence_for_competency(
+        self, interview_id: str, competency_id: str
+    ) -> list[EvidenceEntry]:
+        result = (
+            self._client.table("evidence_entries")
+            .select("data")
+            .eq("interview_id", interview_id)
+            .eq("competency_id", competency_id)
+            .order("created_at")
+            .execute()
+        )
+        return [EvidenceEntry(**as_json_dict(row, "data")) for row in result.data]
+
+    def get_evidence_for_turn(
+        self, interview_id: str, turn_id: str
+    ) -> list[EvidenceEntry]:
+        result = (
+            self._client.table("evidence_entries")
+            .select("data")
+            .eq("interview_id", interview_id)
+            .eq("turn_id", turn_id)
+            .order("created_at")
+            .execute()
+        )
+        return [EvidenceEntry(**as_json_dict(row, "data")) for row in result.data]

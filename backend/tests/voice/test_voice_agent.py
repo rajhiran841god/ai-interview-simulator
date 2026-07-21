@@ -220,3 +220,34 @@ def test_voice_adapter_is_independently_importable_and_removable():
 
     source = inspect.getsource(reasoning_service)
     assert "app.voice" not in source
+
+
+def test_entrypoint_uses_shared_engine_singletons_not_fresh_services():
+    """
+    Regression test for a REAL bug found during live voice testing:
+    entrypoint() originally constructed fresh service instances with
+    default (in-memory) stores every time a voice session started,
+    completely disconnected from whatever the FastAPI backend had
+    already written via app/orchestrator/engine_singletons.py.
+    Symptom: "No competencies initialized" even though the backend
+    had already initialized them moments earlier via a real HTTP call.
+
+    This is a structural check (source inspection), not a full live
+    session test — actually invoking entrypoint() requires a real or
+    heavily mocked LiveKit JobContext/session, which is integration-
+    level testing beyond this suite's scope. This at least ensures
+    the specific fix (import from engine_singletons, not fresh
+    construction) can't silently regress.
+    """
+    import inspect
+    import app.voice.agent as agent_module
+
+    entrypoint_source = inspect.getsource(agent_module.entrypoint)
+
+    assert "from app.orchestrator.engine_singletons import" in entrypoint_source
+    # The specific bug: constructing services directly inside
+    # entrypoint() with no store= argument (defaults to fresh
+    # in-memory). If this pattern reappears, the cross-process bug
+    # is back.
+    assert "ConversationMemoryService()" not in entrypoint_source
+    assert "CompetencyModelService()" not in entrypoint_source

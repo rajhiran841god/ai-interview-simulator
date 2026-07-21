@@ -1,37 +1,68 @@
 """
 App-level singleton wiring for the Interview Intelligence Engine.
 
-IMPORTANT: most engine services default to a FRESH, isolated in-memory
-store per instantiation (verified by inspecting each __init__ — only
-ConversationMemoryService defaults to a true shared module-level
-store). If API route handlers each constructed
-`EvidenceGraphService()` etc. fresh per-request, every request would
-see empty, disconnected state — a real correctness bug, not a style
-preference. This module exists specifically to prevent that: construct
-each engine service exactly ONCE, correctly wired together, and reuse
-these same instances across every request for the lifetime of the
-process.
+NOW PERSISTENT (Postgres via Supabase) — this is exactly the swap
+predicted when this file was first written: "Swapping to a persistent
+store later means changing ONLY this file." A real cross-process bug
+during live voice testing (the FastAPI backend and the LiveKit voice
+worker are separate processes; the old in-memory dicts were invisible
+between them, causing "No competencies initialized" even right after
+initialization) made this swap necessary now rather than later.
 
-This is an in-memory, single-process wiring — matches every engine
-module's own documented "Known Limitations" (not persistent, needs a
-real backend before the pilot). Swapping to a persistent store later
-means changing ONLY this file, per the storage-abstraction pattern
-each module was built with from the start.
+Per Decision Log #006: this changes ONLY the storage layer each
+service is constructed with. Every service class itself
+(ConversationMemoryService, EvidenceGraphService, etc.) is completely
+unchanged — same reasoning, same schemas, same contracts.
 """
 
 from app.engine.conversation_memory.service import ConversationMemoryService
+from app.engine.conversation_memory.store import (
+    PostgresConversationMemoryStore,
+    InMemoryConversationMemoryStore,
+)
 from app.engine.evidence_graph.service import EvidenceGraphService
+from app.engine.evidence_graph.store import (
+    PostgresEvidenceGraphStore,
+    InMemoryEvidenceGraphStore,
+)
 from app.engine.logging.service import LoggingService
+from app.engine.logging.store import PostgresTraceStore, InMemoryTraceStore
 from app.engine.competency_model.service import CompetencyModelService
+from app.engine.competency_model.store import (
+    PostgresCompetencyModelStore,
+    InMemoryCompetencyModelStore,
+)
 from app.engine.evaluation.service import EvaluationEngineService
 from app.engine.reasoning.service import ReasoningEngineService
 from app.engine.question_generator.service import QuestionGeneratorService
 from app.engine.feedback.service import FeedbackGeneratorService
+from app.core.config import settings
 
-conversation_memory = ConversationMemoryService()
-evidence_graph = EvidenceGraphService(conversation_memory=conversation_memory)
-logging_service = LoggingService()
-competency_model = CompetencyModelService()
+_use_postgres = settings.STORE_BACKEND == "postgres"
+
+conversation_memory = ConversationMemoryService(
+    store=(
+        PostgresConversationMemoryStore()
+        if _use_postgres
+        else InMemoryConversationMemoryStore()
+    )
+)
+evidence_graph = EvidenceGraphService(
+    store=(
+        PostgresEvidenceGraphStore() if _use_postgres else InMemoryEvidenceGraphStore()
+    ),
+    conversation_memory=conversation_memory,
+)
+logging_service = LoggingService(
+    store=PostgresTraceStore() if _use_postgres else InMemoryTraceStore()
+)
+competency_model = CompetencyModelService(
+    store=(
+        PostgresCompetencyModelStore()
+        if _use_postgres
+        else InMemoryCompetencyModelStore()
+    )
+)
 evaluation_engine = EvaluationEngineService(
     evidence_graph=evidence_graph, logging_service=logging_service
 )

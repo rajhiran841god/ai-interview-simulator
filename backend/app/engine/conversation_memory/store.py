@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from app.engine.conversation_memory.schema import TurnRecord
+from app.core.supabase_data_client import get_data_client, as_json_dict
 
 
 class ConversationMemoryStore(ABC):
@@ -175,3 +176,104 @@ class _DummyLock:
 
     def __exit__(self, *args):
         return False
+
+
+class PostgresConversationMemoryStore(ConversationMemoryStore):
+    """
+    Persistent implementation, per Decision Log #006 — storage-layer
+    swap only. Fixes the real cross-process bug found during live
+    voice testing: the FastAPI backend and the LiveKit voice worker
+    are separate processes, so InMemoryConversationMemoryStore's data
+    (a plain Python dict) was invisible between them.
+    """
+
+    def __init__(self):
+        self._client = get_data_client()
+
+    def next_sequence_number(self, interview_id: str) -> int:
+        result = (
+            self._client.table("conversation_turns")
+            .select("sequence_number")
+            .eq("interview_id", interview_id)
+            .order("sequence_number", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return 1
+        first_row = result.data[0]
+        assert isinstance(
+            first_row, dict
+        ), "Expected a row object from the query result"
+        return int(first_row["sequence_number"]) + 1
+
+    def append_turn(self, turn: TurnRecord) -> TurnRecord:
+        self._client.table("conversation_turns").insert(
+            {
+                "turn_id": turn.turn_id,
+                "interview_id": turn.interview_id,
+                "question_id": turn.question_id,
+                "sequence_number": turn.sequence_number,
+                "data": turn.model_dump(),
+            }
+        ).execute()
+        return turn
+
+    def update_answer(
+        self,
+        interview_id: str,
+        question_id: str,
+        answer_text: str,
+        answer_timestamp: str,
+    ) -> TurnRecord:
+        from app.engine.conversation_memory.schema import (
+            ConversationMemoryError,
+            ErrorCode,
+        )
+
+        existing = self.get_turn(interview_id, question_id)
+        if existing is None:
+            raise ConversationMemoryError(
+                ErrorCode.ANSWER_WITHOUT_QUESTION,
+                f"No question '{question_id}' found for interview '{interview_id}'.",
+            )
+        updated = existing.model_copy(
+            update={
+                "answer_text": answer_text,
+                "answer_timestamp": answer_timestamp,
+                "status": "answered",
+            }
+        )
+        self._client.table("conversation_turns").update(
+            {"data": updated.model_dump()}
+        ).eq("interview_id", interview_id).eq("question_id", question_id).execute()
+        return updated
+
+    def get_history(self, interview_id: str) -> list[TurnRecord]:
+        result = (
+            self._client.table("conversation_turns")
+            .select("data")
+            .eq("interview_id", interview_id)
+            .order("sequence_number")
+            .execute()
+        )
+        return [TurnRecord(**as_json_dict(row, "data")) for row in result.data]
+
+    def get_turn(self, interview_id: str, question_id: str) -> Optional[TurnRecord]:
+        result = (
+            self._client.table("conversation_turns")
+            .select("data")
+            .eq("interview_id", interview_id)
+            .eq("question_id", question_id)
+            .maybe_single()
+            .execute()
+        )
+        if result is None or not result.data:
+            return None
+        return TurnRecord(**as_json_dict(result.data, "data"))
+
+    def get_turns_by_competency(
+        self, interview_id: str, competency_id: str
+    ) -> list[TurnRecord]:
+        history = self.get_history(interview_id)
+        return [t for t in history if t.target_competency_id == competency_id]
