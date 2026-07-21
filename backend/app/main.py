@@ -1,16 +1,18 @@
 """
 AI Interview Simulator — Backend Entrypoint (v0.1 Pilot)
 
-Scope reminder (see /docs/06_v0.1_Scope.md):
-Text interface only. Auth + core CRUD in this milestone.
-Interview Intelligence Engine is designed separately (Milestone 2)
-and must pass the Architecture Review Gate before implementation.
+Status update: the Interview Intelligence Engine (10 modules) is now
+implemented AND wired into the API via app/orchestrator/ +
+app/api/interviews.py — text interface, per Decision Log #002/#004.
+Voice adapter exists separately (app/voice/agent.py) and is not yet
+wired into a deployed worker process — see docs/VOICE_VALIDATION.md.
 """
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api import auth
+from app.api import auth, interviews
 
 app = FastAPI(
     title="AI Interview Simulator API",
@@ -27,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(interviews.router, prefix="/api", tags=["interviews"])
 
 
 @app.get("/health")

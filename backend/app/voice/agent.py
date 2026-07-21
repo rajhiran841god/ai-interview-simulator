@@ -45,6 +45,7 @@ from app.engine.competency_model.service import CompetencyModelService
 from app.engine.evaluation.service import EvaluationEngineService
 from app.engine.reasoning.service import ReasoningEngineService
 from app.engine.question_generator.service import QuestionGeneratorService
+from app.shared.turn_timer import TurnTimer
 
 logger = logging.getLogger("placementos.voice")
 
@@ -88,6 +89,7 @@ class InterviewVoiceAgent(Agent):
         self._pending_turn_id: Optional[str] = None
         self._pending_evidence_missing: Optional[str] = None
         self._pending_target_competency_id: Optional[str] = None
+        self._turn_number = 0
 
     async def llm_node(
         self, chat_ctx: llm.ChatContext, tools: list, model_settings
@@ -100,6 +102,19 @@ class InterviewVoiceAgent(Agent):
         yield it for TTS to speak.
         """
         latest_user_message = self._extract_latest_user_text(chat_ctx)
+
+        self._turn_number += 1
+        timer = TurnTimer(interview_id=self.interview_id, turn_number=self._turn_number)
+        # NOTE on honesty: this mark fires when llm_node is invoked,
+        # which is AFTER LiveKit's own STT has already produced a
+        # transcript — our code cannot observe "student finished
+        # speaking" or "STT complete" as separate moments, since both
+        # happen upstream of this hook. Labeled accurately as
+        # "transcript_received", not mislabeled to imply precision we
+        # don't have. Real STT-stage timing requires LiveKit's own
+        # session-level metrics (MetricsCollectedEvent), not yet wired
+        # up here — a real, stated gap, not a silent omission.
+        timer.mark("transcript_received")
 
         # Step 1: if a question is pending, this transcript is the
         # answer to it. Record it in Conversation Memory FIRST — the
@@ -137,6 +152,7 @@ class InterviewVoiceAgent(Agent):
                 answer_text=latest_user_message,
                 target_competency_id=self._pending_target_competency_id,
             )
+            timer.mark("evaluation_complete")
             # CRITICAL STEP, easy to miss: Evaluation Engine deliberately
             # does NOT update competency-level confidence itself (see
             # Evaluation_Engine_Contract.md's Explicit Scope Resolution
@@ -151,11 +167,15 @@ class InterviewVoiceAgent(Agent):
                     contradiction_detected=evaluation_result.contradiction_detected,
                     evidence_ids_created=evaluation_result.evidence_ids_created,
                 )
+                timer.mark("competency_updated")
 
         # Step 2: ask the UNCHANGED Reasoning Engine what happens next.
         decision = self._reasoning_engine.decide_next_action(self.interview_id)
+        timer.mark("reasoning_complete")
 
         if decision.decision_type == "stop":
+            timer.mark("stop_decision_ready")
+            timer.log_summary()
             yield decision.stop_reason or "Thank you, that concludes the interview."
             return
 
@@ -163,6 +183,7 @@ class InterviewVoiceAgent(Agent):
         generated = self._question_generator.generate_question(
             self.interview_id, decision
         )
+        timer.mark("question_generated")
 
         # Track what we're waiting for, so the NEXT llm_node call
         # (after the student answers) knows what to evaluate.
@@ -173,6 +194,16 @@ class InterviewVoiceAgent(Agent):
         # question, since Question Generator already called record_turn().
         turn = self._conversation_memory.get_history(self.interview_id)
         self._pending_turn_id = turn[-1].turn_id if turn else None
+
+        # NOTE on honesty: this is the last point our code observes.
+        # From here, LiveKit takes the yielded text, runs TTS, and
+        # plays audio — none of that is visible to this hook. "AI
+        # speaking" (per the requested log format) would need to be
+        # captured via LiveKit's own TTS/playback events, not this
+        # override. Logging what we can honestly measure now, rather
+        # than estimating or faking the remaining stages.
+        timer.mark("text_ready_for_tts")
+        timer.log_summary()
 
         yield generated.question_text
 
