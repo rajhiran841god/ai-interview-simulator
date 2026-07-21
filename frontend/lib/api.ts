@@ -45,6 +45,12 @@ export interface EvidenceDetail {
   question_number: number;
 }
 
+export interface VoiceTokenResponse {
+  livekit_url: string;
+  token: string;
+  room_name: string;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -103,4 +109,9 @@ export const api = {
 
   getEvidenceDetail: (interviewId: string, competencyId: string) =>
     request<EvidenceDetail[]>(`/api/interviews/${interviewId}/evidence/${competencyId}`),
+
+  getVoiceToken: (interviewId: string) =>
+    request<VoiceTokenResponse>(`/api/interviews/${interviewId}/voice-token`, {
+      method: "POST",
+    }),
 };
