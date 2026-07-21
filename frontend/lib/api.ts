@@ -38,6 +38,13 @@ export interface InterviewFeedbackReport {
   generated_at: string;
 }
 
+export interface EvidenceDetail {
+  evidence_id: string;
+  evidence_excerpt: string;
+  relation: "supports" | "contradicts";
+  question_number: number;
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -93,4 +100,7 @@ export const api = {
 
   getReport: (interviewId: string) =>
     request<InterviewFeedbackReport>(`/api/interviews/${interviewId}/report`),
+
+  getEvidenceDetail: (interviewId: string, competencyId: string) =>
+    request<EvidenceDetail[]>(`/api/interviews/${interviewId}/evidence/${competencyId}`),
 };
