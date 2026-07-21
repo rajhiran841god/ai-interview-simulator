@@ -9,6 +9,7 @@ verified structurally by schema, not just by example output.
 """
 
 import datetime
+import re
 from typing import Optional
 
 from app.engine.feedback.schema import (
@@ -105,7 +106,7 @@ class FeedbackGeneratorService:
         return CompetencyFeedback(
             competency_id=competency_id,
             emphasis=emphasis,
-            summary_text=raw.get("summary_text", ""),
+            summary_text=_scrub_evidence_ids(raw.get("summary_text", "")),
             supporting_evidence_ids=verified.supporting_evidence_ids,
             contradictory_evidence_ids=verified.contradictory_evidence_ids,
             has_unresolved_contradiction=plan.has_unresolved_contradiction,
@@ -127,3 +128,35 @@ class FeedbackGeneratorService:
                 f"{contradictions} contain unresolved contradictions worth reviewing."
             )
         return " ".join(parts)
+
+
+# UUID pattern (standard 8-4-4-4-12 hex format, the shape every
+# evidence_id in this project actually takes — see uuid.uuid4() calls
+# in evidence_graph/store.py). Also strips common citation-marker
+# wrapping like "(evidence: ...)" around it, so the scrub doesn't just
+# remove the ID and leave an awkward empty parenthetical behind.
+_UUID_PATTERN = re.compile(
+    r"\s*\(?\s*(?:evidence[:\s]*)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\)?",
+    re.IGNORECASE,
+)
+
+
+def _scrub_evidence_ids(summary_text: str) -> str:
+    """
+    Defensive, structural safeguard — per the project's established
+    discipline of never trusting LLM prompt compliance alone (the same
+    reasoning behind EvidenceVerifier's structural ID check). Found
+    necessary via live validation: a real model response embedded raw
+    evidence_id UUIDs directly in prose (e.g. "...redesigned our
+    approach (evidence: c8f16fa5-4b83-40de-9d74-b21e748094d7)."),
+    despite the system prompt asking it not to. Strips any UUID-shaped
+    string from student-facing text, regardless of how the model
+    chooses to format it, rather than relying solely on prompt wording
+    to prevent this.
+    """
+    cleaned = _UUID_PATTERN.sub("", summary_text)
+    # Collapse any resulting double spaces or dangling punctuation
+    # left behind by the removal (e.g. "feedback . " -> "feedback.")
+    cleaned = re.sub(r"\s+([.,;])", r"\1", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip()

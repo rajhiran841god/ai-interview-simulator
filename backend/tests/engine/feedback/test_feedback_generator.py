@@ -438,3 +438,46 @@ def test_provider_isolation_only_generator_touches_sdk():
 
     gen_source = inspect.getsource(gen)
     assert "from app.core.provider_adapter import get_provider" in gen_source
+
+
+# Regression test for a REAL bug found via live validation (not a mock):
+# a live model embedded raw evidence_id UUIDs directly in summary_text
+# prose, despite the prompt asking it not to. This tests the
+# structural safeguard added in response — never rely on prompt
+# compliance alone for something a student will actually read.
+def test_scrub_evidence_ids_removes_real_uuid_pattern_found_in_live_output():
+    from app.engine.feedback.service import _scrub_evidence_ids
+
+    # This is the actual text pattern returned by a live model during
+    # validation (docs/LIVE_VALIDATION_LOG.md, Entry 5) — used verbatim
+    # as the regression case, not a synthetic approximation.
+    real_problematic_text = (
+        "They showed initiative by organizing additional focus groups "
+        "to gather customer insights and demonstrated adaptability by "
+        "redesigning their approach based on the feedback received "
+        "(evidence: c8f16fa5-4b83-40de-9d74-b21e748094d7). The candidate "
+        "also displayed maturity (evidence: c442665e-458d-4855-a0c4-e9bb2fc20f1c)."
+    )
+    cleaned = _scrub_evidence_ids(real_problematic_text)
+
+    import re
+
+    uuid_pattern = re.compile(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE
+    )
+    assert uuid_pattern.findall(cleaned) == []
+    # Confirm real content survives — this isn't just deleting everything
+    assert "organizing additional focus groups" in cleaned
+    assert "maturity" in cleaned
+    # Confirm no double-spacing or dangling punctuation artifacts
+    assert "  " not in cleaned
+    assert " ." not in cleaned
+
+
+def test_scrub_evidence_ids_leaves_clean_text_completely_unchanged():
+    from app.engine.feedback.service import _scrub_evidence_ids
+
+    clean_text = (
+        "The candidate showed strong leadership by organizing the team effectively."
+    )
+    assert _scrub_evidence_ids(clean_text) == clean_text

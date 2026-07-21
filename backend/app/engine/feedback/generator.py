@@ -24,8 +24,13 @@ do not invent an assessment.
 If there are contradictory items, address the inconsistency directly
 and professionally.
 
-For every claim you make, cite which evidence_id(s) from the supplied
-list support it.
+For every claim you make, identify which evidence_id(s) from the
+supplied list support it — but report these ONLY in the separate
+"cited_evidence_ids" field below, never inside "summary_text" itself.
+The summary_text must read as natural, human-quality prose a student
+would actually receive — it must NEVER contain evidence_id values,
+UUIDs, or any parenthetical citation markers like "(evidence: ...)".
+A student should never see an internal identifier in their feedback.
 
 Return ONLY valid JSON:
 {

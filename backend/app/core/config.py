@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     # not this milestone. Present here so the config surface is ready.)
     ANTHROPIC_API_KEY: str = ""
 
+    # Provider selection: "anthropic" (real, direct — default) or
+    # "gateway" (validation-only, third-party OpenAI-compatible proxy).
+    # Set in your OWN .env, never shared in chat. See provider_adapter.py.
+    LLM_PROVIDER: str = "anthropic"
+    GATEWAY_API_KEY: str = ""
+    GATEWAY_BASE_URL: str = ""
+    GATEWAY_MODEL: str = "claude-3-5-sonnet-20241022"
+
     # App
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
     ENVIRONMENT: str = "development"
