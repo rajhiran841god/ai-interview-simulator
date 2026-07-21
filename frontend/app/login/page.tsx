@@ -32,16 +32,14 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-1 text-xl font-semibold text-gray-900">Sign in</h1>
-        <p className="mb-6 text-sm text-gray-500">
-          AI Interview Simulator — Pilot
-        </p>
+    <main className="flex min-h-screen items-center justify-center bg-paper px-4">
+      <div className="w-full max-w-sm bg-paper-card rounded-card p-8 shadow-sm">
+        <h1 className="font-display text-2xl text-ink mb-1">Sign in</h1>
+        <p className="font-sans text-sm text-ink-light mb-6">PlacementOS</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="font-sans mb-1 block text-sm font-medium text-ink">
               Email
             </label>
             <input
@@ -49,12 +47,12 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              className="font-sans w-full rounded-card border border-ink/15 px-3 py-2 text-sm text-ink focus:border-ink focus:outline-none bg-paper"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
+            <label className="font-sans mb-1 block text-sm font-medium text-ink">
               Password
             </label>
             <input
@@ -62,24 +60,24 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              className="font-sans w-full rounded-card border border-ink/15 px-3 py-2 text-sm text-ink focus:border-ink focus:outline-none bg-paper"
             />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="font-sans text-sm text-clay">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-md bg-gray-900 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="font-sans w-full rounded-card bg-ink py-2.5 text-sm font-medium text-paper hover:bg-ink-light transition-colors disabled:opacity-50"
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-500">
+        <p className="font-sans mt-5 text-center text-sm text-ink-light">
           No account?{" "}
-          <a href="/signup" className="font-medium text-gray-900 underline">
+          <a href="/signup" className="font-medium text-ink underline">
             Sign up
           </a>
         </p>
