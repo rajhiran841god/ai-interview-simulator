@@ -111,7 +111,29 @@ Answer exactly these questions, and no others, with real evidence:
 | Bugs/glitches observed | Raw, unfiltered — even minor ones |
 | Answers to the feedback questions above | Verbatim where possible — quotes are valuable |
 
-## Decisions After the Pilot (fill in once data exists — do not pre-fill with guesses)
+## Deliberate Test Matrix (don't rely on organic interviews alone)
+
+Real pilot interviews will mostly produce "average, cooperative"
+answers by default — the harder-to-observe behaviors (insufficient
+evidence, contradiction handling, vague-answer follow-up) may never
+appear organically in a small sample. Script these scenarios
+deliberately, either as dedicated pre-pilot live tests (cheaper, faster
+feedback loop) or as directed prompts to a few pilot participants
+("for this one, try giving a deliberately vague answer"):
+
+| Candidate type | Goal | Status |
+|---|---|---|
+| Strong | Confirm high-confidence reporting, coherent multi-turn synthesis | ✅ Validated live — `LIVE_VALIDATION_LOG.md` Entry 6 |
+| Average | Check calibration and stopping behavior at moderate confidence | ⏳ Not yet tested live |
+| Weak | Validate `insufficient_evidence` handling — honest, not fabricated | ⏳ Not yet tested live |
+| Contradictory | Exercise `has_unresolved_contradiction` / `challenge_inconsistency` | ⏳ Not yet tested live |
+| Vague | Ensure the engine asks follow-up questions rather than overconfidently concluding | ⏳ Not yet tested live |
+
+**Do not tune any threshold based on the "Strong" row alone** — that's
+exactly the mistake avoided by adding this matrix. Every row needs at
+least one real, live data point before `reasoning_config.py`'s
+defaults get touched.
+
 
 - [ ] Does Decision #002's core hypothesis (readiness gap is real,
       engine quality matters) hold up?

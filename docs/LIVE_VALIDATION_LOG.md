@@ -128,7 +128,22 @@ numbers transfer.
 
 ---
 
-## Overall Assessment — All 6 Entries Complete
+## Entry 7 — Contradiction Detection (Cross-Cutting: Evaluation Engine → Evidence Graph → Feedback Generator)
+
+| Field | Value |
+|---|---|
+| **Module** | Cross-cutting — closes the specific gap flagged in Entry 3's follow-up ("test a contradiction scenario live — hasn't been exercised with a real model yet") |
+| **Input** | Two deliberately conflicting real answers to the same competency (`leadership`): first claiming personal decision-making authority ("I personally made all the key technical decisions"), second directly contradicting it ("my manager made all the final decisions... I mostly just relayed instructions") |
+| **Model used** | `anthropic/claude-sonnet-4.5` |
+| **Gateway/provider** | aicredits.in |
+| **Expected behavior** | Evaluation Engine explicitly detects the contradiction (not inferred downstream); Evidence Graph correctly separates `supports` vs. `contradicts` relations and links the specific contradicted entry; Feedback Generator surfaces it honestly and constructively in the final report |
+| **Actual behavior** | **First answer**: `contradiction_detected: false` (correct — no prior evidence existed yet), 3 evidence entries created, `confidence_contribution: 0.7`. **Second answer**: `contradiction_detected: true`, explicitly citing `contradicted_evidence_id` pointing at the *exact* first evidence entry about personal decision-making (not a generic "somewhere" reference), `confidence_contribution: 0.9` (correctly high — this reflects certainty that an inconsistency exists, not praise for the candidate, per the module's documented confidence scope). Critically, the `reasoning_summary` explicitly referenced the real prior claim in its own text — proof the model's classifier call genuinely reasoned over real prior evidence via `prior_evidence_excerpts`, not just emitting a bare flag. **Final report**: `has_unresolved_contradiction: true`, `contradictory_evidence_ids` containing the exact 2 IDs from the second evaluation, `supporting_evidence_ids` containing the exact 3 IDs from the first — every ID traced end to end, not just matching in count. Summary text addressed the conflict directly, professionally, and constructively ("distinguish between situations where you had genuine decision-making authority versus coordination responsibilities"), not just flagging the conflict and stopping. `overall_summary` correctly counted it. |
+| **Pass/Fail** | ✅ **Pass — fully verified end to end, not just at the report level** |
+| **Observations** | This closes the single most architecturally significant untested path in the whole project. Every ID was traced precisely from Evaluation Engine's raw output through Evidence Graph's storage to the Feedback Generator's final citations — not just "the counts matched" but the literal same UUIDs at every stage. The model's own reasoning text at the point of detection is itself evidence it genuinely compared against real prior context, not a coincidental or hallucinated flag. |
+| **Follow-up action** | Remaining untested live: `insufficient_evidence` (weak/vague answer path) and the `deflection`/`non_answer` classification distinction — per the test matrix now in `PILOT_EXECUTION_PLAN.md`. |
+
+---
+
 
 **The entire live-API validation gap that had been open since Module 1 is now closed with real evidence, not mocks.** Summary:
 
@@ -139,7 +154,7 @@ numbers transfer.
 ### Real, actionable findings for the next phase
 
 1. **`MIN_QUESTIONS=6` / `0.85` average / `0.60` floor thresholds appear conservative** — 6 consecutive strong, substantive answers were not enough to trigger a stop. This is genuine pilot-tuning signal, not a flaw — per `reasoning_config.py`'s own documentation, these were always unvalidated pilot defaults awaiting exactly this kind of real data. Do not retune from a single session — collect several more real interviews first, per the original recommendation to avoid overfitting to one data point.
-2. **The weak-answer / contradiction / insufficient-evidence paths remain untested live** — every real test so far used strong, detailed answers. Worth a deliberate test with a deliberately vague or contradictory answer before wider pilot use, since these paths carry real product-quality risk (Architecture Review Gate #4's core promise depends on handling weak evidence honestly, not just strong evidence well).
+2. **The weak-answer / insufficient-evidence / deflection paths remain untested live** — contradiction detection is now closed (Entry 7), but every real test so far used strong or clearly-conflicting answers. Worth a deliberate test with a deliberately vague, weak, or evasive answer before wider pilot use, since these paths carry real product-quality risk (Architecture Review Gate #4's core promise depends on handling weak evidence honestly, not just strong evidence well).
 3. **Latency remains incompletely measured** — only Resume/JD Understanding expose `processing_time_ms`; Evaluation Engine, Question Generator, and Feedback Generator do not. Worth closing this gap (a simple wrapper, not an engine change) before treating the latency picture as complete, especially given `VOICE_VALIDATION.md`'s Test 2 depends on knowing exactly where time is spent.
 
 ## Latency Summary (update as entries are added)
